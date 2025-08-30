@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nano Banana Editor</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif; }
+      .wrap { display: grid; grid-template-rows: 1fr auto; height: 100vh; }
+      header { padding: 12px 16px; border-bottom: 1px solid #ddd; font-weight: 600; }
+      .chat { padding: 12px; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+      .msg { display: grid; grid-template-columns: 80px 1fr; gap: 12px; align-items: start; }
+      .role { font-size: 12px; text-transform: uppercase; opacity: .7; }
+      .bubble { border: 1px solid #e2e2e2; border-radius: 10px; padding: 10px; }
+      .bubble img { max-width: 100%; border-radius: 8px; }
+      .composer { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; padding: 12px; border-top: 1px solid #ddd; }
+      input[type="text"] { padding: 10px; border-radius: 8px; border: 1px solid #ccc; width: 100%; }
+      button { padding: 10px 14px; border-radius: 8px; border: 1px solid #ccc; background: #f7f7f7; cursor: pointer; }
+      .thumb { max-width: 80px; max-height: 80px; object-fit: contain; border-radius: 6px; border: 1px solid #ddd; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>🍌 Nano Banana Editor</header>
+      <main class="chat" id="chat"></main>
+      <form class="composer" id="form">
+        <label for="file" style="display:inline-flex;align-items:center;gap:6px;">
+          <input type="file" id="file" accept="image/*" style="display:none" />
+          <span>Upload</span>
+        </label>
+        <input type="text" id="prompt" placeholder="Describe your edit (e.g., make it watercolor, remove background)" />
+        <button type="submit">Generate</button>
+      </form>
+    </div>
+    <script>
+      const sessionId = crypto.randomUUID();
+      const chatEl = document.getElementById('chat');
+      const formEl = document.getElementById('form');
+      const fileEl = document.getElementById('file');
+      const promptEl = document.getElementById('prompt');
+
+      let lastUploadedDataUrl = null;
+
+      fileEl.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          lastUploadedDataUrl = reader.result;
+          addMessage('user', `Uploaded image`, lastUploadedDataUrl);
+        };
+        reader.readAsDataURL(file);
+      });
+
+      function addMessage(role, text, imageDataUrl) {
+        const msg = document.createElement('div');
+        msg.className = 'msg';
+        const roleEl = document.createElement('div');
+        roleEl.className = 'role';
+        roleEl.textContent = role;
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        if (text) {
+          const p = document.createElement('p');
+          p.textContent = text;
+          bubble.appendChild(p);
+        }
+        if (imageDataUrl) {
+          const img = document.createElement('img');
+          img.src = imageDataUrl;
+          bubble.appendChild(img);
+        }
+        msg.appendChild(roleEl);
+        msg.appendChild(bubble);
+        chatEl.appendChild(msg);
+        chatEl.scrollTop = chatEl.scrollHeight;
+      }
+
+      async function generate(prompt, imageDataUrl) {
+        const payload = { sessionId, prompt, imageDataUrl };
+        const res = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('Generation failed');
+        return res.json();
+      }
+
+      formEl.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const prompt = promptEl.value.trim();
+        if (!prompt && !lastUploadedDataUrl) return;
+        addMessage('user', prompt || null, lastUploadedDataUrl || null);
+        const pendingId = crypto.randomUUID();
+        addMessage('model', 'Generating…');
+        try {
+          const { imageDataUrl, text } = await generate(prompt, lastUploadedDataUrl);
+          // Clear local upload only after used; keep chat context in backend
+          lastUploadedDataUrl = null;
+          addMessage('model', text || null, imageDataUrl || null);
+        } catch (err) {
+          addMessage('model', 'Failed: ' + (err?.message || err));
+        } finally {
+          promptEl.value = '';
+          fileEl.value = '';
+        }
+      });
+    </script>
+  </body>
+  </html>
+
