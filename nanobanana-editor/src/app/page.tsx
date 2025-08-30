@@ -1,103 +1,177 @@
-import Image from "next/image";
+"use client";
+
+import { useRef, useState } from "react";
+import { Upload, Send, ImagePlus, Loader2 } from "lucide-react";
+import { toast, Toaster } from "sonner";
+
+type ChatEntry = {
+  id: string;
+  role: "user" | "assistant";
+  prompt?: string;
+  imageUrl?: string;
+};
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [chat, setChat] = useState<ChatEntry[]>([]);
+  const [prompt, setPrompt] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  const onPickFile = () => fileInputRef.current?.click();
+
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return url;
+    });
+  };
+
+  const onSend = async () => {
+    if (!prompt && !fileInputRef.current?.files?.[0]) {
+      toast.error("Add a prompt or upload an image.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const form = new FormData();
+      form.append("prompt", prompt);
+      const history = chat.map((m) => ({
+        role: m.role,
+        parts: [
+          ...(m.prompt ? [{ text: m.prompt }] : []),
+          ...(m.imageUrl
+            ? [{ inlineData: { data: m.imageUrl.split(",")[1], mimeType: "image/png" } }]
+            : []),
+        ],
+      }));
+      form.append("history", JSON.stringify(history));
+
+      const file = fileInputRef.current?.files?.[0];
+      if (file) form.append("image", file);
+
+      const res = await fetch("/api/images", { method: "POST", body: form });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Request failed");
+      }
+      const data = (await res.json()) as { imageBase64: string; mimeType: string };
+
+      const userEntry: ChatEntry = {
+        id: crypto.randomUUID(),
+        role: "user",
+        prompt,
+        imageUrl: previewUrl || undefined,
+      };
+      const assistantEntry: ChatEntry = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        imageUrl: `data:${data.mimeType};base64,${data.imageBase64}`,
+      };
+      setChat((c) => [...c, userEntry, assistantEntry]);
+      setPrompt("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(null);
+      }
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Something went wrong";
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Toaster position="top-center" richColors />
+      <header className="sticky top-0 z-10 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-white/10">
+        <div className="mx-auto max-w-5xl px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ImagePlus className="w-6 h-6" />
+            <h1 className="text-lg font-semibold tracking-tight">Nano Banana Editor</h1>
+          </div>
+          <button
+            onClick={onPickFile}
+            className="inline-flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm hover:bg-white/5 transition"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            <Upload className="w-4 h-4" /> Upload
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={onFileChange}
+          />
         </div>
+      </header>
+
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 grid md:grid-cols-[360px_1fr] gap-6">
+        <aside className="space-y-3">
+          <div className="rounded-lg border border-white/10 p-3">
+            <p className="text-sm/6 opacity-80">Selected image</p>
+            <div className="mt-2 aspect-square overflow-hidden rounded-md bg-white/5 flex items-center justify-center">
+              {previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={previewUrl} alt="preview" className="w-full h-full object-contain" />
+              ) : (
+                <div className="text-sm opacity-60">No image selected</div>
+              )}
+            </div>
+          </div>
+          <div className="rounded-lg border border-white/10 p-3">
+            <p className="text-sm/6 opacity-80">Tips</p>
+            <ul className="mt-2 list-disc pl-5 text-sm/6 opacity-80 space-y-1">
+              <li>Describe edits precisely, e.g. &quot;add soft golden hour lighting&quot;</li>
+              <li>Upload an image to apply localized edits</li>
+              <li>Iterate by referencing the last output in your prompt</li>
+            </ul>
+          </div>
+        </aside>
+
+        <section className="flex flex-col min-h-[60vh]">
+          <div className="flex-1 overflow-auto rounded-lg border border-white/10 p-3 space-y-4 bg-white/5">
+            {chat.length === 0 && (
+              <div className="text-sm opacity-70">Start by uploading an image or entering a prompt.</div>
+            )}
+            {chat.map((m) => (
+              <div key={m.id} className="space-y-2">
+                <div className="text-xs uppercase tracking-wide opacity-60">{m.role}</div>
+                {m.prompt && <div className="text-sm whitespace-pre-wrap">{m.prompt}</div>}
+                {m.imageUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={m.imageUrl} alt="result" className="max-h-[480px] rounded-md border border-white/10" />
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 flex items-end gap-3">
+            <div className="flex-1">
+              <label className="block text-sm/6 opacity-80 mb-1">Prompt</label>
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Describe the edit or image you want..."
+                className="w-full min-h-[88px] rounded-md border border-white/10 bg-transparent p-3 text-sm outline-none focus:ring-2 focus:ring-white/20"
+              />
+            </div>
+            <button
+              onClick={onSend}
+              disabled={isLoading}
+              className="h-[44px] shrink-0 inline-flex items-center gap-2 rounded-md border border-white/10 px-4 hover:bg-white/5 transition disabled:opacity-60"
+            >
+              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              <span>Generate</span>
+            </button>
+          </div>
+        </section>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
   );
 }
