@@ -78,8 +78,9 @@ export default function Home() {
         URL.revokeObjectURL(previewUrl);
         setPreviewUrl(null);
       }
-    } catch (e: any) {
-      toast.error(e.message || "Something went wrong");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Something went wrong";
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -126,7 +127,7 @@ export default function Home() {
           <div className="rounded-lg border border-white/10 p-3">
             <p className="text-sm/6 opacity-80">Tips</p>
             <ul className="mt-2 list-disc pl-5 text-sm/6 opacity-80 space-y-1">
-              <li>Describe edits precisely, e.g. "add soft golden hour lighting"</li>
+              <li>Describe edits precisely, e.g. &quot;add soft golden hour lighting&quot;</li>
               <li>Upload an image to apply localized edits</li>
               <li>Iterate by referencing the last output in your prompt</li>
             </ul>

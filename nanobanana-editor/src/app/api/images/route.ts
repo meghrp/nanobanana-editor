@@ -111,9 +111,10 @@ export async function POST(req: NextRequest) {
     let imageBase64: string | undefined;
     let mimeType = "image/png";
 
-    for (const part of parts as any[]) {
-      if (part.inlineData?.data) {
-        imageBase64 = part.inlineData.data as string;
+    type CandidatePart = { inlineData?: { data?: string; mimeType?: string } };
+    for (const part of parts as CandidatePart[]) {
+      if (part.inlineData && part.inlineData.data) {
+        imageBase64 = part.inlineData.data;
         mimeType = part.inlineData.mimeType || mimeType;
         break;
       }
@@ -138,8 +139,8 @@ export async function POST(req: NextRequest) {
       JSON.stringify({ imageBase64, mimeType }),
       { status: 200, headers: { "content-type": "application/json" } }
     );
-  } catch (err: any) {
-    const message = err?.message || "Unknown error";
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
     return new Response(
       JSON.stringify({ error: message }),
       { status: 500, headers: { "content-type": "application/json" } }
