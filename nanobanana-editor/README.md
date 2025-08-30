@@ -1,8 +1,22 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is a modern AI image editing app powered by Google's Gemini 2.5 Flash Image (aka "nano-banana"). Users can upload an image and use natural language prompts to generate or edit images. Results are shown in a chat-like timeline so you can iterate quickly.
 
 ## Getting Started
 
-First, run the development server:
+## Getting Started
+
+### Environment
+
+Set your API key in the environment (local dev uses `.env.local`):
+
+```
+GEMINI_API_KEY=your_api_key
+```
+
+Optionally, `GOOGLE_API_KEY` is also supported.
+
+### Develop
+
+Run the development server:
 
 ```bash
 npm run dev
@@ -16,9 +30,31 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+You can start editing the page by modifying `src/app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## API
+
+Server route: `src/app/api/images/route.ts`
+
+POST multipart/form-data fields:
+- `prompt`: string, optional
+- `image`: file, optional
+- `history`: JSON array of prior messages with parts (text or inlineData)
+
+Response JSON:
+```
+{ imageBase64: string, mimeType: string }
+```
+
+Model: `models/gemini-2.5-flash-image-preview` via `@google/generative-ai`.
+
+## Features
+- Upload and preview an image
+- Prompt-based edits/generation
+- Chat timeline with image propagation
+- Clean, responsive UI with dark mode
 
 ## Learn More
 
